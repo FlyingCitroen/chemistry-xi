@@ -66,16 +66,6 @@ streamlit run app.py
 LLM (optional, either one): `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
 **or** `GITHUB_MODELS_TOKEN` (+ optional `GITHUB_MODELS_MODEL`). See `.env.example`.
 
-## Deploy to Azure Container Apps
-```bash
-az login
-az containerapp up --name chemistry-xi --resource-group <rg> --location <region> \
-  --source . --ingress external --target-port 8501
-az containerapp secret set -n chemistry-xi -g <rg> --secrets aoai-key=<KEY>
-az containerapp update -n chemistry-xi -g <rg> --min-replicas 1 --set-env-vars \
-  AZURE_OPENAI_ENDPOINT=<endpoint> AZURE_OPENAI_DEPLOYMENT=<deployment> AZURE_OPENAI_API_KEY=secretref:aoai-key
-```
-
 ## Technologies actually used
 <!-- Edit to match reality. Keep only what you really used. -->
 - Python, Streamlit, Altair/pandas, pytest, GitHub Actions, Docker
