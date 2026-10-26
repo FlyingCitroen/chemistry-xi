@@ -79,8 +79,8 @@ az containerapp update -n chemistry-xi -g <rg> --min-replicas 1 --set-env-vars \
 ## Technologies actually used
 <!-- Edit to match reality. Keep only what you really used. -->
 - Python, Streamlit, Altair/pandas, pytest, GitHub Actions, Docker
-- LLM provider: **Azure OpenAI** *or* **GitHub Models** (whichever you configure) — delete the other line
-- Hosting: **Azure Container Apps** (only if you deployed there)
+- LLM provider: **GitHub Models** 
+
 
 ## Limitations (honest)
 - Synthetic data; thresholds are illustrative (`chem_config.py`). Possession is a pass-share proxy.
