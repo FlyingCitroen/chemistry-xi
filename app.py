@@ -15,12 +15,18 @@ import overlays
 from generate_data import write_events
 from personalize import Profile, relevance
 from pipeline import MatchPipeline
+from ui_text import U as _U
 
 st.set_page_config(page_title="Chemistry XI", page_icon="⚽", layout="wide")
+LANG = st.session_state.get("lang", "en")          # the language chosen on the previous run
 LABELS = [f"{a} → {b}" for a, b in C.PAIRS]
 ICON = {"goal": "⚽", "big_chance": "🎯", "fast_shot": "💥", "long_pass": "📐", "momentum": "🌊",
         "link": "🔗", "milestone": "🏅"}
 GAME_ICON = {"WARMING_UP": "⏳", "CONTROL": "🎯", "HIGH_PRESS": "🔥", "CHAOS": "🌪️", "BALANCED": "⚖️"}
+
+
+def U(key, **kw):
+    return _U(st.session_state.get("lang", "en"), key, **kw)
 
 
 # ---------- data & pipeline ----------
@@ -43,34 +49,28 @@ events, ALL, N = PIPE.events, PIPE.chem, len(PIPE.events)
 by_id = {e["event_id"]: e for e in events}
 
 
-@st.cache_data(show_spinner="Narrator + Verifier working…")
+@st.cache_data(show_spinner="…")
 def cached_moment(idx, persona, lang, detail):
     return agents.narrate_moment(PIPE.moments[idx], persona, lang, detail)
 
 
-@st.cache_data(show_spinner="Recap agent working…")
+@st.cache_data(show_spinner="…")
 def cached_match_recap(k, pkey):
     p = Profile.from_key(pkey)
     return agents.recap_match(events, k, PIPE.personalize(k, p), p)
 
 
-@st.cache_data(show_spinner="Agents working…")
-def cached_narration(pair, k, persona):
+@st.cache_data(show_spinner="…")
+def cached_narration(pair, k, persona, lang):
     states = ALL[pair]
     t = engine.transitions(states, events, k)[-1]
     f = agents.build_finding(f"{pair[0]} → {pair[1]}", t, states[k])
-    return agents.narrate(f, persona)
-
-
-@st.cache_data(show_spinner="Recap agent working…")
-def cached_chem_recap(k, persona):
-    return agents.recap(events, ALL, k, persona)
+    return agents.narrate(f, persona, lang=lang)
 
 
 def build_profile() -> Profile:
     ss = st.session_state
-    club = ss.get("club", "(none)")
-    player = ss.get("player", "(none)")
+    club, player = ss.get("club", "(none)"), ss.get("player", "(none)")
     player = None if player == "(none)" else player
     return Profile(mode=ss.get("mode", "Casual fan"), lang=ss.get("lang", "en"),
                    club=None if club == "(none)" else club, player=player,
@@ -108,9 +108,10 @@ def request_recap():
     st.session_state.recap_req = (st.session_state.k, build_profile().key())
 
 
-def show_trace(result, label="Agent trace (Analyst → Narrator → Verifier)"):
-    st.caption(f"Mode: **{result.mode}**")
-    with st.expander(label):
+def show_trace(result):
+    st.caption(U("mode_caption", m=U("mode_" + {"llm": "llm", "template": "template", "fallback": "fallback"}[result.mode])))
+    with st.expander(U("trace_title")):
+        st.caption(U("trace_note"))
         for s in result.trace:
             st.markdown(f"{'✅' if s.ok else '❌'} **{s.agent}** · {s.action}")
             st.caption(s.detail)
@@ -133,30 +134,30 @@ st.session_state.setdefault("k", 0)
 
 # ---------- sidebar: the viewer profile ----------
 with st.sidebar:
-    st.header("Viewer profile")
-    st.radio("Viewing mode", ["Casual fan", "Analyst"], key="mode", horizontal=True)
-    st.selectbox("Language", list(i18n.LANGS), format_func=lambda c: i18n.LANGS[c], key="lang")
-    st.selectbox("Favourite club", ["(none)"] + C.TEAMS, key="club")
-    st.selectbox("Favourite player", ["(none)"] + C.ALL_PLAYERS, key="player")
-    st.toggle("Player focus mode (only this player's moments)", key="player_focus")
-    st.selectbox("Metric focus", ["auto", "shot_speed", "pass_quality", "pressure", "chemistry"], key="metric")
-    st.selectbox("Narration voice", list(agents.PERSONAS), key="persona")
+    st.header(U("profile"))
+    st.radio(U("mode_label"), ["Casual fan", "Analyst"], key="mode", horizontal=True,
+             format_func=lambda v: U("mode_casual" if v == "Casual fan" else "mode_analyst"))
+    st.selectbox("Language / 语言 / 言語 / Idioma", list(i18n.LANGS), format_func=lambda c: i18n.LANGS[c], key="lang")
+    st.selectbox(U("club_label"), ["(none)"] + C.TEAMS, key="club",
+                 format_func=lambda v: U("none") if v == "(none)" else v)
+    st.selectbox(U("player_label"), ["(none)"] + C.ALL_PLAYERS, key="player",
+                 format_func=lambda v: U("none") if v == "(none)" else v)
+    st.toggle(U("focus_label"), key="player_focus")
+    st.selectbox(U("metric_label"), ["auto", "shot_speed", "pass_quality", "pressure", "chemistry"], key="metric",
+                 format_func=lambda v: U("metric_" + v))
+    st.selectbox(U("voice_label"), list(agents.PERSONAS), key="persona", format_func=lambda v: U("voice_" + v))
     st.caption(llm.status())
     if llm.LAST_ERROR:
         st.caption(f"Last LLM error: {llm.LAST_ERROR[:160]}")
-    with st.expander("Chemistry lens"):
-        st.selectbox("Player pair (forward passes)", LABELS, key="pair_choice")
-    with st.expander("Rules used (chem_config.py)"):
+    with st.expander(U("chem_lens")):
+        st.selectbox(U("pair_label"), LABELS, key="pair_choice")
+    with st.expander(U("rules_title")):
         st.json({"team_baseline": C.TEAM_BASELINE, **C.R.__dict__})
-    with st.expander("Method"):
-        st.markdown(
-            "- **Pipeline:** ingest → interpret → explain → render → personalize.\n"
-            "- Link score: Beta-smoothed success rate with ≈80% credible band.\n"
-            "- Game state: last 5 match minutes (possession share, turnovers, pressure, tempo).\n"
-            "- Every state uses only events played so far.\n"
-            "- The LLM never decides: a Verifier rejects any number, label or player not in the engine output.")
+    with st.expander(U("method_title")):
+        st.markdown(U("method_body"))
 
 profile = build_profile()
+LANG = profile.lang
 pair = current_pair()
 pair_label = st.session_state.get("pair_choice", LABELS[0])
 k = st.session_state.k
@@ -167,220 +168,216 @@ detail = profile.mode
 
 # ---------- header ----------
 st.title("⚽ Chemistry XI")
-st.caption("Explainable match intelligence · synthetic Northbridge FC v Eastport United")
+st.caption(U("app_caption"))
 c1, c2, c3, c4 = st.columns(4)
-c1.button("▶ Next event", key="btn_next", on_click=advance, args=(1,), disabled=k >= N, width="stretch")
-c2.button("⏩ Next 10", key="btn_next10", on_click=advance, args=(10,), disabled=k >= N, width="stretch")
-c3.button("⏭ Next key moment", key="btn_moment", on_click=next_moment, disabled=k >= N, width="stretch")
-c4.button("↺ Reset", key="btn_reset", on_click=reset, disabled=k == 0, width="stretch")
+c1.button(U("btn_next"), key="btn_next", on_click=advance, args=(1,), disabled=k >= N, width="stretch")
+c2.button(U("btn_next10"), key="btn_next10", on_click=advance, args=(10,), disabled=k >= N, width="stretch")
+c3.button(U("btn_moment"), key="btn_moment", on_click=next_moment, disabled=k >= N, width="stretch")
+c4.button(U("btn_reset"), key="btn_reset", on_click=reset, disabled=k == 0, width="stretch")
 
 clock = insight.clock(events[k - 1]) if k else "00:00"
 t1, t2, t3, t4 = st.columns(4)
-t1.metric("MATCH CLOCK", clock)
-t2.metric("EVENTS PLAYED", f"{k} / {N}")
+t1.metric(U("m_clock"), clock)
+t2.metric(U("m_events"), f"{k} / {N}")
 t3.metric(f"{home} v {away}", f"{sc[home]} – {sc[away]}")
-t4.metric("GAME STATE", f"{GAME_ICON[tac.label]} {tac.label}" + (f" · {tac.team}" if tac.team else ""))
+t4.metric(U("m_state"), f"{GAME_ICON[tac.label]} {U('game_' + tac.label)}" + (f" · {tac.team}" if tac.team else ""))
 st.progress(k / N if N else 0)
 
-tab_mc, tab_player, tab_chem, tab_recap = st.tabs(
-    ["📺 Match centre", "🧍 Player focus", "🔗 Chemistry", "📝 Recap"])
+tab_mc, tab_player, tab_chem, tab_recap = st.tabs([U("tab_mc"), U("tab_player"), U("tab_chem"), U("tab_recap")])
 
 # ================= MATCH CENTRE =================
 with tab_mc:
     left, right = st.columns([3, 2])
     with left:
-        st.subheader("Your personalised feed")
-        st.caption(f"{profile.mode} · {i18n.LANGS[profile.lang]}"
+        st.subheader(U("feed_title"))
+        st.caption(f"{U('mode_casual' if profile.mode == 'Casual fan' else 'mode_analyst')} · {i18n.LANGS[profile.lang]}"
                    + (f" · ❤ {profile.club}" if profile.club else "")
-                   + (f" · ⭐ {profile.player}" + (" (focus)" if profile.player_focus else "")
-                      if profile.player else "")
-                   + (f" · metric: {profile.metric}" if profile.metric != "auto" else ""))
+                   + (f" · ⭐ {profile.player}" if profile.player else "")
+                   + (f" · {U('metric_' + profile.metric)}" if profile.metric != "auto" else ""))
         chosen = PIPE.personalize(k, profile)
         if chosen:
             for m in reversed(chosen[-6:]):
                 res = cached_moment(m.idx, profile.persona, profile.lang, detail)
                 with st.container(border=True):
                     st.markdown(f"{ICON[m.type]} {res.text}")
-                    st.caption(f"{m.type} · relevance {relevance(m, profile):.2f} · {res.mode}")
+                    st.caption(f"{U('type_' + m.type)} · {U('relevance')} {relevance(m, profile):.2f}")
             show_trace(cached_moment(chosen[-1].idx, profile.persona, profile.lang, detail))
         else:
-            st.info("Nothing matches your profile yet. Click Next event or Next key moment.")
+            st.info(U("feed_empty"))
 
-        st.subheader("On-screen overlay (stage d)")
+        st.subheader(U("overlay_title"))
         if chosen:
             latest = chosen[-1]
             res = cached_moment(latest.idx, profile.persona, profile.lang, detail)
             ov = overlays.overlay(latest, profile.lang, detail, res.text)
             overlay_card(ov)
-            with st.expander("Machine-readable overlay JSON"):
+            with st.expander(U("overlay_json")):
                 st.json(ov)
         feed = PIPE.render(k, profile)
-        st.download_button("⬇ Download overlay timeline (JSON)", overlays.to_json(feed),
-                           file_name="overlays.json", mime="application/json",
-                           disabled=not feed, key="btn_download")
+        st.download_button(U("download"), overlays.to_json(feed), file_name="overlays.json",
+                           mime="application/json", disabled=not feed, key="btn_download")
     with right:
-        st.subheader("Why the game feels like this")
-        st.markdown(f"**{GAME_ICON[tac.label]} {tac.label}**" + (f" · {tac.team}" if tac.team else ""))
-        st.write(tac.reason)
-        st.caption(f"Rhythm: {tac.rhythm} · window: last {tac.window_min} match minutes")
+        st.subheader(U("why_game"))
+        st.markdown(f"**{GAME_ICON[tac.label]} {U('game_' + tac.label)}**" + (f" · {tac.team}" if tac.team else ""))
+        st.write(i18n.tactical_text(tac, profile.lang))
+        st.caption(U("rhythm_line", r=U("rhythm_" + tac.rhythm), w=tac.window_min))
         poss = view["possession"]
-        st.markdown(f"**Possession (share of passes)** — {home} {poss[home]}% · {away} {poss[away]}%")
+        st.markdown(f"**{U('possession_title')}** — {home} {poss[home]}% · {away} {poss[away]}%")
         st.progress(poss[home] / 100)
         ts = view["teams"]
-        rows = [("Passes", "passes"), ("Pass accuracy %", "accuracy"), ("Shots", "shots"),
-                ("On target", "on_target"), ("xG", "xg"), ("Tackles won", "tackles_won"),
-                ("Pressures", "pressures")]
-        st.dataframe([{"Stat": lab, home: ts[home][key], away: ts[away][key]} for lab, key in rows],
+        rows = [("st_passes", "passes"), ("st_accuracy", "accuracy"), ("st_shots", "shots"),
+                ("st_on_target", "on_target"), ("st_xg", "xg"), ("st_tackles_won", "tackles_won"),
+                ("st_pressures", "pressures")]
+        st.dataframe([{U("stat_col"): U(lab), home: ts[home][key], away: ts[away][key]} for lab, key in rows],
                      width="stretch", hide_index=True)
-        st.subheader("Recent events")
+        st.subheader(U("recent_title"))
         if k:
             def describe(e):
                 a = e["player_from"] + (f" → {e['player_to']}" if e.get("player_to") else "")
-                return {"Time": insight.clock(e), "Team": e["team"], "Event": a, "Type": e["event_type"],
-                        "Result": "✓" if e["successful"] else "✗"}
+                return {U("col_time"): insight.clock(e), U("col_team"): e["team"], U("col_event"): a,
+                        U("col_type"): e["event_type"], "✓": "✓" if e["successful"] else "✗"}
             st.dataframe([describe(e) for e in reversed(events[max(0, k - 8):k])],
                          width="stretch", hide_index=True)
         else:
-            st.info("Click Next event to start the match.")
+            st.info(U("recent_hint"))
 
 # ================= PLAYER FOCUS =================
 with tab_player:
     default = C.ALL_PLAYERS.index(profile.player) if profile.player else 1
-    who = st.selectbox("Player", C.ALL_PLAYERS, index=default, key="focus_player")
+    who = st.selectbox(U("p_select"), C.ALL_PLAYERS, index=default, key="focus_player")
     ps = insight.player_stats(events[:k], who)
-    num, pos = C.ROSTER[who][1], C.ROSTER[who][2]
-    st.subheader(f"#{num} {who} · {pos} · {C.ROSTER[who][0]}")
+    st.subheader(f"#{C.ROSTER[who][1]} {who} · {C.ROSTER[who][2]} · {C.ROSTER[who][0]}")
     a1, a2, a3, a4 = st.columns(4)
-    a1.metric("Passes completed", f"{ps['completed']}/{ps['passes']}")
-    a2.metric("Accuracy", f"{ps['accuracy']}%" if ps["accuracy"] is not None else "—")
-    a3.metric("Avg pass difficulty", ps["avg_difficulty"] if ps["avg_difficulty"] is not None else "—")
-    a4.metric("Longest completed pass", f"{ps['longest_pass']} m" if ps["longest_pass"] else "—")
+    a1.metric(U("p_completed"), f"{ps['completed']}/{ps['passes']}")
+    a2.metric(U("p_accuracy"), f"{ps['accuracy']}%" if ps["accuracy"] is not None else "—")
+    a3.metric(U("p_difficulty"), ps["avg_difficulty"] if ps["avg_difficulty"] is not None else "—")
+    a4.metric(U("p_longest"), f"{ps['longest_pass']} m" if ps["longest_pass"] else "—")
     b1, b2, b3, b4 = st.columns(4)
-    b1.metric("Top ball speed", f"{ps['top_ball_speed']} km/h" if ps["top_ball_speed"] else "—")
-    b2.metric("Shots / goals / assists", f"{ps['shots']} / {ps['goals']} / {ps['assists']}")
-    b3.metric("xG", ps["xg"])
-    b4.metric("Tackles won", f"{ps['tackles_won']}/{ps['tackles']}")
-    st.markdown("**Threshold indicators** (long pass ≥ "
-                f"{C.LONG_PASS_M} m, shot ≥ {C.FAST_SHOT_KMH} km/h, ball ≥ {C.FAST_PASS_KMH} km/h)")
+    b1.metric(U("p_ballspeed"), f"{ps['top_ball_speed']} km/h" if ps["top_ball_speed"] else "—")
+    b2.metric(U("p_sga"), f"{ps['shots']} / {ps['goals']} / {ps['assists']}")
+    b3.metric(U("p_xg"), ps["xg"])
+    b4.metric(U("p_tackles"), f"{ps['tackles_won']}/{ps['tackles']}")
+    st.markdown(U("ind_title", a=C.LONG_PASS_M, b=C.FAST_SHOT_KMH, c=C.FAST_PASS_KMH))
+    names = {"Shot speed": "ind_shot", "Long pass": "ind_long", "Ball speed": "ind_ball"}
     ind = insight.indicators(events[:k], who)
-    st.dataframe(ind, width="stretch", hide_index=True) if ind else st.caption("None triggered yet.")
-    st.markdown("**Moments involving this player**")
+    if ind:
+        st.dataframe([{U("col_time"): r["Time"], U("col_player"): r["Player"],
+                       U("col_indicator"): U(names[r["Indicator"]]), U("col_value"): r["Value"]} for r in ind],
+                     width="stretch", hide_index=True)
+    else:
+        st.caption(U("ind_none"))
+    st.markdown(U("p_moments"))
     mine = [m for m in PIPE.explain(k) if who in m.players]
     if mine:
         for m in reversed(mine[-5:]):
-            res = cached_moment(m.idx, profile.persona, profile.lang, detail)
-            st.markdown(f"{ICON[m.type]} {res.text}")
+            st.markdown(f"{ICON[m.type]} {cached_moment(m.idx, profile.persona, profile.lang, detail).text}")
     else:
-        st.caption("No key moments for this player yet.")
+        st.caption(U("p_none"))
 
 # ================= CHEMISTRY =================
 with tab_chem:
-    state = ALL[pair][k]
-    stats, states = state.stats, ALL[pair]
-    sub_live, sub_scan = st.tabs(["Live link analysis", "Team scan"])
+    states = ALL[pair]
+    state = states[k]
+    stats = state.stats
+    sub_live, sub_scan = st.tabs([U("sub_live"), U("sub_scan")])
     with sub_live:
-        st.button("⏭ Next link change", key="btn_link", on_click=next_link_change, disabled=k >= N)
+        st.button(U("btn_link"), key="btn_link", on_click=next_link_change, disabled=k >= N)
         left, right = st.columns([3, 2])
         with left:
             st.subheader(pair_label)
-            st.metric("Buff", f"{C.BUFF_STYLE[state.buff][0]} {state.buff}")
+            st.metric(U("buff_label"), f"{C.BUFF_STYLE[state.buff][0]} {state.buff}")
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric(f"Passes (last {C.R.window})", stats.attempts)
-            m2.metric("Successful", stats.successes)
-            m3.metric("Progressive", stats.progressive)
-            m4.metric("Chances", stats.chances)
+            m1.metric(U("c_passes", n=C.R.window), stats.attempts)
+            m2.metric(U("c_ok"), stats.successes)
+            m3.metric(U("c_prog"), stats.progressive)
+            m4.metric(U("c_chances"), stats.chances)
             m5, m6 = st.columns(2)
-            m5.metric("Observed rate", f"{stats.raw:.1%}" if stats.raw is not None else "—")
-            m6.metric("Smoothed rate", f"{stats.smoothed:.1%}" if stats.smoothed is not None else "—",
-                      delta=f"{(stats.smoothed - C.TEAM_BASELINE) * 100:+.1f} pp vs baseline"
+            m5.metric(U("c_observed"), f"{stats.raw:.1%}" if stats.raw is not None else "—")
+            m6.metric(U("c_smoothed"), f"{stats.smoothed:.1%}" if stats.smoothed is not None else "—",
+                      delta=U("c_vs_base", d=f"{(stats.smoothed - C.TEAM_BASELINE) * 100:+.1f}")
                       if stats.smoothed is not None else None)
-            st.subheader("Uncertainty over time")
-            rows = [{"Pass #": s.pair_n, "Smoothed": s.stats.smoothed, "Low": s.stats.lo,
-                     "High": s.stats.hi, "Buff": s.buff}
-                    for prev, s in zip(states[:k], states[1:k + 1]) if s.pair_n != prev.pair_n]
+            st.subheader(U("unc_title"))
+            rows = [{"n": s.pair_n, "Smoothed": s.stats.smoothed, "Low": s.stats.lo, "High": s.stats.hi,
+                     "Buff": s.buff} for prev, s in zip(states[:k], states[1:k + 1]) if s.pair_n != prev.pair_n]
             if rows:
                 df = pd.DataFrame(rows)
                 total = max(states[-1].pair_n, 2)
-                x = alt.X("Pass #:Q", scale=alt.Scale(domain=[1, total]), axis=alt.Axis(tickMinStep=1))
+                x = alt.X("n:Q", title=U("axis_pass"), scale=alt.Scale(domain=[1, total]),
+                          axis=alt.Axis(tickMinStep=1))
                 ys = alt.Scale(domain=[0, 1])
                 band = alt.Chart(df).mark_area(opacity=0.18).encode(
-                    x=x, y=alt.Y("Low:Q", scale=ys, axis=alt.Axis(format="%", title="Success rate")), y2="High:Q")
+                    x=x, y=alt.Y("Low:Q", scale=ys, axis=alt.Axis(format="%", title=U("axis_rate"))), y2="High:Q")
                 line = alt.Chart(df).mark_line(color="#555").encode(x=x, y=alt.Y("Smoothed:Q", scale=ys))
                 pts = alt.Chart(df).mark_circle(size=90).encode(
                     x=x, y=alt.Y("Smoothed:Q", scale=ys),
-                    color=alt.Color("Buff:N", scale=alt.Scale(
+                    color=alt.Color("Buff:N", legend=None, scale=alt.Scale(
                         domain=list(C.BUFF_STYLE), range=[v[1] for v in C.BUFF_STYLE.values()])),
-                    tooltip=["Pass #", alt.Tooltip("Smoothed:Q", format=".1%"), "Buff"])
+                    tooltip=["n", alt.Tooltip("Smoothed:Q", format=".1%"), "Buff"])
                 rule = lambda v, dash: alt.Chart(pd.DataFrame({"y": [v]})).mark_rule(
                     strokeDash=dash, color="#888").encode(y=alt.Y("y:Q", scale=ys))
                 st.altair_chart(alt.layer(band, line, pts, rule(C.TEAM_BASELINE, [4, 4]),
                                           rule(engine.super_threshold(), [1, 3])).properties(height=260),
                                 width="stretch")
-                st.caption(f"Dashed = baseline {C.TEAM_BASELINE:.0%}; dotted = Super Link threshold "
-                           f"{engine.super_threshold():.1%}; band = ≈80% credible interval.")
+                st.caption(U("chart_caption", base=f"{C.TEAM_BASELINE:.0%}", thr=f"{engine.super_threshold():.1%}"))
             else:
-                st.info("No pair passes yet.")
-            st.subheader("Why this Buff?")
-            st.write(state.reason)
-            if state.buff != C.SUPER and state.unmet and stats.attempts:
-                st.markdown("**Why not SUPER_LINK yet?**")
-                for u in state.unmet:
+                st.info(U("no_pairs"))
+            st.subheader(U("why_buff"))
+            st.write(i18n.chem_reason(state, profile.lang))
+            if state.buff != C.SUPER and stats.attempts:
+                st.markdown(U("why_not"))
+                for u in i18n.chem_unmet(state, profile.lang):
                     st.markdown(f"- {u}")
-            st.subheader("Evidence")
+            st.subheader(U("evidence_title"))
             if stats.evidence:
-                st.dataframe([{"Time": insight.clock(by_id[i]),
-                               "Result": "✅ Success" if by_id[i]["successful"] else "❌ Failed",
-                               "Progressive": "Yes" if by_id[i]["progressive"] else "",
-                               "Chance created": "Yes" if by_id[i]["chance_created"] else "",
-                               "Distance (m)": by_id[i]["distance_m"],
-                               "Difficulty": by_id[i]["difficulty"]}
+                st.dataframe([{U("col_time"): insight.clock(by_id[i]),
+                               U("col_result"): U("ev_ok") if by_id[i]["successful"] else U("ev_fail"),
+                               U("ev_prog"): U("yes") if by_id[i]["progressive"] else "",
+                               U("ev_chance"): U("yes") if by_id[i]["chance_created"] else "",
+                               U("ev_dist"): by_id[i]["distance_m"], U("ev_diff"): by_id[i]["difficulty"]}
                               for i in reversed(stats.evidence)], width="stretch", hide_index=True)
         with right:
-            st.subheader("🎙 Link narration")
+            st.subheader(U("link_narr"))
             trans = engine.transitions(states, events, k)
             if trans:
-                res = cached_narration(pair, k, profile.persona)
+                res = cached_narration(pair, k, profile.persona, profile.lang)
                 st.write(res.text)
                 show_trace(res)
-                st.dataframe(list(reversed(trans)), width="stretch", hide_index=True)
+                st.dataframe([{U("col_time"): t["Time"], U("col_from"): t["From"], U("col_to"): t["To"],
+                               U("col_smoothed"): t["Smoothed"],
+                               U("col_reason"): i18n.chem_reason(states[t["Event #"]], profile.lang)}
+                              for t in reversed(trans)], width="stretch", hide_index=True)
             else:
-                st.caption("The narrator speaks when a Buff changes.")
+                st.caption(U("link_wait"))
     with sub_scan:
-        st.caption("Every directed pair is scanned with the same rules, ranked by the **lower** credible "
-                   "bound. Pairs with too few passes sit on a watchlist, however good they look.")
-        fmt = {c: st.column_config.NumberColumn(format="percent") for c in ("Smoothed", "Low (80%)", "High (80%)")}
-        rows_of = lambda rs: [{"Pair": r["Pair"], "Buff": f"{C.BUFF_STYLE[r['Buff']][0]} {r['Buff']}",
-                               "Passes so far": r["Passes"], "In window": r["Window"],
-                               "Smoothed": r["Smoothed"], "Low (80%)": r["Low"], "High (80%)": r["High"]}
+        st.caption(U("scan_caption"))
+        fmt = {U(c): st.column_config.NumberColumn(format="percent") for c in ("sc_smoothed", "sc_low", "sc_high")}
+        rows_of = lambda rs: [{U("sc_pair"): r["Pair"], U("sc_buff"): f"{C.BUFF_STYLE[r['Buff']][0]} {r['Buff']}",
+                               U("sc_total"): r["Passes"], U("sc_window"): r["Window"],
+                               U("sc_smoothed"): r["Smoothed"], U("sc_low"): r["Low"], U("sc_high"): r["High"]}
                               for r in rs]
         ranked = engine.leaderboard(ALL, k, C.R.super_min_attempts)
         watch = [r for r in engine.leaderboard(ALL, k) if r["Pair"] not in {x["Pair"] for x in ranked}]
-        st.markdown(f"**Ranked** (≥ {C.R.super_min_attempts} passes in window)")
+        st.markdown(U("ranked_title", n=C.R.super_min_attempts))
         if ranked:
             st.dataframe(rows_of(ranked), width="stretch", hide_index=True, column_config=fmt)
         else:
-            st.info(f"No pair has {C.R.super_min_attempts} passes in the window yet.")
+            st.info(U("ranked_none", n=C.R.super_min_attempts))
         if watch:
-            st.markdown("**Watchlist** — too little data to rank")
+            st.markdown(U("watch_title"))
             st.dataframe(rows_of(watch), width="stretch", hide_index=True, column_config=fmt)
 
 # ================= RECAP =================
 with tab_recap:
-    st.subheader("Automated match recap")
-    st.caption("Built only from verified key moments and engine statistics, tailored to your profile "
-               "(mode, language, club, player, metric).")
-    st.button("Generate recap at current minute", key="btn_recap", on_click=request_recap, disabled=k == 0)
+    st.subheader(U("recap_title"))
+    st.caption(U("recap_caption"))
+    st.button(U("btn_recap"), key="btn_recap", on_click=request_recap, disabled=k == 0)
     req = st.session_state.get("recap_req")
     if req:
         rk, pkey = req
         res = cached_match_recap(rk, pkey)
-        st.markdown(f"**Recap · {insight.clock(events[rk - 1])} · {i18n.LANGS[Profile.from_key(pkey).lang]}**")
+        st.markdown(f"**{U('recap_header', clock=insight.clock(events[rk - 1]), language=i18n.LANGS[Profile.from_key(pkey).lang])}**")
         st.write(res.text)
-        show_trace(res, "Agent trace (Analyst → Narrator → Verifier)")
-        with st.expander("Chemistry recap (link moments across all pairs)"):
-            cres, moments, top = cached_chem_recap(rk, Profile.from_key(pkey).persona)
-            st.write(cres.text)
+        show_trace(res)
 
 st.divider()
-st.caption("Synthetic data and illustrative rules. Possession is a pass-share proxy. Buffs are analytical "
-           "states, not real player abilities; a high pass-success rate does not prove chemistry.")
+st.caption(U("footer"))

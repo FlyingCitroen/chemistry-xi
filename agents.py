@@ -166,19 +166,25 @@ def _run(facts: str, template: str, persona: str, length: str, trace: list,
     return Result(text, mode, tuple(trace))
 
 
-def narration_template(f: Finding, persona: str) -> str:
+def narration_template(f: Finding, persona: str, lang: str = "en") -> str:
+    if lang != "en":
+        tr, sep = i18n.CH[lang], i18n.T[lang]["sep"]
+        head = f"{f.time} — {f.label}: {f.frm} → {f.to}."
+        detail = tr["detail"].format(a=f.attempts, s=f.successes, sm=f"{f.smoothed:.1%}",
+                                     b=f"{C.TEAM_BASELINE:.0%}", p=f.progressive, c=f.chances)
+        return sep.join([head, tr["tag_" + f.to], detail])
     return (f"{OPENERS[persona]} {f.time} — {f.label}: {f.frm} → {f.to}. {TAGS[f.to]} "
             f"Over the last {f.attempts} forward passes, {f.successes} succeeded "
             f"({f.smoothed:.1%} smoothed vs a {C.TEAM_BASELINE:.0%} baseline), with "
             f"{f.progressive} progressive and {f.chances} chance(s) created.")
 
 
-def narrate(f: Finding, persona: str, llm_fn=None, max_attempts: int = 3) -> Result:
+def narrate(f: Finding, persona: str, llm_fn=None, max_attempts: int = 3, lang: str = "en") -> Result:
     llm_fn = llm_fn or llm.chat
     trace = [Step("Analyst", "tool: build_finding",
                   f"{f.label}: {f.frm} → {f.to} at {f.time} (deterministic engine output)")]
-    return _run(f.facts(), narration_template(f, persona), persona,
-                "Write at most 2 sentences.", trace, llm_fn, max_attempts)
+    return _run(f.facts(), narration_template(f, persona, lang), persona,
+                f"Write at most 2 sentences in {i18n.LANGS[lang]}.", trace, llm_fn, max_attempts)
 
 
 # ---------------- Recap agent ----------------

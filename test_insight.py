@@ -105,3 +105,44 @@ def test_pipeline_is_fast_enough_for_live_play():
     t = time.time()
     MatchPipeline(EVENTS)
     assert time.time() - t < 5  # whole match (all pairs, states, moments) in a few seconds, far less per event
+
+
+def test_ui_has_the_same_keys_in_every_language():
+    import ui_text
+    base = set(ui_text.UI["en"])
+    for lang, d in ui_text.UI.items():
+        assert set(d) == base, (lang, base ^ set(d))
+    assert set(i18n.LANGS) == set(ui_text.UI) == set(i18n.T) == set(i18n.CH) == set(i18n.CHIP)
+
+
+def test_every_ui_key_used_by_the_app_exists():
+    import re
+    import ui_text
+    used = set(re.findall(r'U\("([a-z_0-9]+)"', open("app.py", encoding="utf-8").read()))
+    dynamic = {"mode_", "metric_", "voice_", "type_", "game_", "rhythm_"}
+    missing = [k for k in used if k not in ui_text.UI["en"] and k not in dynamic]
+    assert not missing, missing
+    for prefix, vals in {"metric_": ["auto", "shot_speed", "pass_quality", "pressure", "chemistry"],
+                         "voice_": ["Fan", "Commentator", "Coach", "Analyst"],
+                         "type_": ["goal", "big_chance", "fast_shot", "long_pass", "momentum", "link", "milestone"],
+                         "game_": ["WARMING_UP", "CONTROL", "HIGH_PRESS", "CHAOS", "BALANCED"],
+                         "rhythm_": ["fast", "steady", "slow"]}.items():
+        assert all(prefix + v in ui_text.UI["en"] for v in vals)
+
+
+def test_chemistry_texts_are_localised_and_consistent():
+    tl = P.chem[("Alex", "Jamie")]
+    for lang in i18n.LANGS:
+        reasons = {i18n.chem_reason(s, lang) for s in tl}
+        assert len(reasons) > 3 and all(reasons)
+    # the localised 'what is missing' list has the same length as the engine's own list
+    for s in [s for s in tl if s.stats.attempts]:
+        assert len(i18n.chem_unmet(s, "zh")) == len(s.unmet)
+    # English re-derivation matches the engine's original reasons exactly
+    played = [s for s in tl if s.stats.attempts]
+    assert all(i18n.chem_reason(s, "en") == s.reason for s in played)
+
+
+def test_tactical_text_localised():
+    for lang in i18n.LANGS:
+        assert all(i18n.tactical_text(t, lang) for t in P.tactical[::25])

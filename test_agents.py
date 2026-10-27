@@ -112,3 +112,11 @@ def test_match_recap_is_grounded_in_every_language():
         res = agents.recap_match(EVENTS, len(EVENTS), P.personalize(len(EVENTS), prof), prof,
                                  llm_fn=lambda s, u: None)
         assert res.mode == "template" and "3-1" in res.text
+
+
+def test_link_narration_in_every_language_is_verified():
+    import i18n
+    for f in all_findings():
+        for lang in i18n.LANGS:
+            for persona in agents.PERSONAS:
+                assert agents.verify(agents.narration_template(f, persona, lang), f.facts()) == [], (lang, f)

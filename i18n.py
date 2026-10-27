@@ -192,3 +192,98 @@ def render_parts(m, lang: str = "en", detail: str = "Casual fan") -> list:
 def render(m, lang: str = "en", detail: str = "Casual fan", opener: str = "") -> str:
     text = T[lang]["sep"].join(render_parts(m, lang, detail))
     return f"{opener} {text}".strip() if opener else text
+
+
+# ---------------- chemistry (link engine) texts ----------------
+CH = {
+ "en": {"insuff": "Only {n} pair pass(es) so far; at least {min} are needed before any judgment.",
+        "super": "Smoothed rate {sm} ≥ {thr} over the last {n} passes, with {p} progressive passes and {c} chance(s) created.",
+        "cool_enter": "No longer meets Super Link criteria. Holding for {cd} pair passes before downgrading.",
+        "cool_left": "Cooling down: {left} pair pass(es) left in the hold period.",
+        "potential": "Smoothed rate {sm} is above the {b} baseline, but not all Super Link criteria are met.",
+        "normal": "Smoothed rate {sm} is not clearly above the {b} team baseline.",
+        "u_att": "Needs {need} passes in the window (has {has}).", "u_rate": "Smoothed rate must be ≥ {thr} (now {cur}).",
+        "u_prog": "Needs {need} progressive passes (has {has}).", "u_chance": "Needs {need} chance created (has {has}).",
+        "tag_SUPER_LINK": "The link is clicking.", "tag_COOLING_DOWN": "The connection is cooling off.",
+        "tag_POTENTIAL_LINK": "Early signs of a link.", "tag_NORMAL": "Back to ordinary levels.",
+        "tag_INSUFFICIENT_EVIDENCE": "Too early to say.",
+        "detail": "Over the last {a} forward passes, {s} succeeded ({sm} smoothed vs a {b} baseline), with {p} progressive and {c} chance(s) created."},
+ "zh": {"insuff": "目前仅有{n}次该配对传球；至少需要{min}次才能做出判断。",
+        "super": "最近{n}次传球的平滑成功率为{sm}，不低于{thr}，并有{p}次推进传球和{c}次创造机会。",
+        "cool_enter": "已不再满足超级连线条件，将在{cd}次配对传球后再降级。",
+        "cool_left": "冷却中：保持期内还剩{left}次配对传球。",
+        "potential": "平滑成功率{sm}高于{b}的基线，但尚未满足全部超级连线条件。",
+        "normal": "平滑成功率{sm}没有明显高于{b}的球队基线。",
+        "u_att": "窗口内需要{need}次传球（目前{has}次）。", "u_rate": "平滑成功率需不低于{thr}（目前{cur}）。",
+        "u_prog": "需要{need}次推进传球（目前{has}次）。", "u_chance": "需要创造{need}次机会（目前{has}次）。",
+        "tag_SUPER_LINK": "连线状态火热。", "tag_COOLING_DOWN": "这对搭档正在降温。",
+        "tag_POTENTIAL_LINK": "出现了连线的早期迹象。", "tag_NORMAL": "回到普通水平。",
+        "tag_INSUFFICIENT_EVIDENCE": "为时尚早，无法判断。",
+        "detail": "最近{a}次前插传球中成功{s}次（平滑成功率{sm}，基线{b}），其中推进传球{p}次，创造机会{c}次。"},
+ "ja": {"insuff": "このペアのパスはまだ{n}本。判断には少なくとも{min}本必要。",
+        "super": "直近{n}本のパスの平滑化成功率は{sm}で{thr}以上、前進パス{p}本、チャンス創出{c}回。",
+        "cool_enter": "スーパーリンクの条件を満たさなくなった。{cd}本のペアパスの間は様子を見る。",
+        "cool_left": "クールダウン中：保持期間はあと{left}本。",
+        "potential": "平滑化成功率{sm}は基準{b}を上回るが、スーパーリンクの全条件は未達。",
+        "normal": "平滑化成功率{sm}はチーム基準{b}を明確には上回っていない。",
+        "u_att": "ウィンドウ内に{need}本のパスが必要（現在{has}本）。", "u_rate": "平滑化成功率が{thr}以上必要（現在{cur}）。",
+        "u_prog": "前進パスが{need}本必要（現在{has}本）。", "u_chance": "チャンス創出が{need}回必要（現在{has}回）。",
+        "tag_SUPER_LINK": "リンクが噛み合っている。", "tag_COOLING_DOWN": "つながりが冷めてきた。",
+        "tag_POTENTIAL_LINK": "リンクの兆しが見える。", "tag_NORMAL": "通常レベルに戻った。",
+        "tag_INSUFFICIENT_EVIDENCE": "判断するには早すぎる。",
+        "detail": "直近{a}本の前方パスのうち{s}本が成功（平滑化{sm}、基準{b}）、前進パス{p}本、チャンス創出{c}回。"},
+ "es": {"insuff": "Solo {n} pase(s) de esta pareja; hacen falta al menos {min} para juzgar.",
+        "super": "Tasa suavizada {sm} ≥ {thr} en los últimos {n} pases, con {p} pases progresivos y {c} ocasión(es) creada(s).",
+        "cool_enter": "Ya no cumple los criterios de Super Link. Se mantiene durante {cd} pases de la pareja antes de bajar.",
+        "cool_left": "Enfriándose: quedan {left} pase(s) de la pareja en el periodo de espera.",
+        "potential": "La tasa suavizada {sm} supera la base de {b}, pero no se cumplen todos los criterios de Super Link.",
+        "normal": "La tasa suavizada {sm} no supera con claridad la base del equipo ({b}).",
+        "u_att": "Necesita {need} pases en la ventana (tiene {has}).", "u_rate": "La tasa suavizada debe ser ≥ {thr} (ahora {cur}).",
+        "u_prog": "Necesita {need} pases progresivos (tiene {has}).", "u_chance": "Necesita {need} ocasión creada (tiene {has}).",
+        "tag_SUPER_LINK": "El vínculo funciona.", "tag_COOLING_DOWN": "La conexión se está enfriando.",
+        "tag_POTENTIAL_LINK": "Primeras señales de vínculo.", "tag_NORMAL": "Vuelve a niveles normales.",
+        "tag_INSUFFICIENT_EVIDENCE": "Demasiado pronto para opinar.",
+        "detail": "En los últimos {a} pases hacia delante, {s} fueron exitosos ({sm} suavizado frente a una base de {b}), con {p} progresivos y {c} ocasión(es) creada(s)."},
+}
+
+
+def chem_reason(state, lang: str = "en") -> str:
+    """Localised version of the link engine's reason, rebuilt from the numbers in the state."""
+    import chem_config as C
+    import chem_engine as engine
+    tr, st = CH[lang], state.stats
+    sm = f"{st.smoothed:.1%}" if st.smoothed is not None else "n/a"
+    b = f"{C.TEAM_BASELINE:.0%}"
+    if state.buff == C.INSUFFICIENT:
+        return tr["insuff"].format(n=st.attempts, min=C.R.min_attempts)
+    if state.buff == C.SUPER:
+        return tr["super"].format(sm=sm, thr=f"{engine.super_threshold():.1%}", n=st.attempts,
+                                  p=st.progressive, c=st.chances)
+    if state.buff == C.COOLING:
+        return (tr["cool_enter"].format(cd=C.R.cooldown_events) if state.cooldown_left == C.R.cooldown_events
+                else tr["cool_left"].format(left=state.cooldown_left))
+    return tr["potential" if state.buff == C.POTENTIAL else "normal"].format(sm=sm, b=b)
+
+
+def chem_unmet(state, lang: str = "en") -> list:
+    import chem_config as C
+    import chem_engine as engine
+    tr, st, R = CH[lang], state.stats, C.R
+    thr, out = engine.super_threshold(), []
+    if st.attempts < R.super_min_attempts:
+        out.append(tr["u_att"].format(need=R.super_min_attempts, has=st.attempts))
+    if st.smoothed is None or st.smoothed < thr:
+        out.append(tr["u_rate"].format(thr=f"{thr:.1%}", cur="n/a" if st.smoothed is None else f"{st.smoothed:.1%}"))
+    if st.progressive < R.super_min_progressive:
+        out.append(tr["u_prog"].format(need=R.super_min_progressive, has=st.progressive))
+    if st.chances < R.super_min_chances:
+        out.append(tr["u_chance"].format(need=R.super_min_chances, has=st.chances))
+    return out
+
+
+def tactical_text(tac, lang: str = "en") -> str:
+    from ui_text import U
+    if tac.label == "WARMING_UP":
+        return U(lang, "warm_reason")
+    return T[lang][f"mom_{tac.label}_why"].format(share_pct=tac.share_pct, turnovers=tac.turnovers,
+                                                    pressures=tac.pressures, window_min=tac.window_min)
