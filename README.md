@@ -1,50 +1,68 @@
-# ⚽ Chemistry XI — explainable match intelligence, in your language
+# ⚽ Chemistry XI: explainable match intelligence
 
-> **Pitch.** Football stories don't end at the scoreline, and AI narration shouldn't invent them.
-> Chemistry XI turns a stream of synthetic match events into verified key moments, explains *why*
-> each one matters (control vs chaos, pressure, rhythm, and whether a goal came from a player link our
-> engine had already flagged), and delivers it as timed, machine-readable broadcast overlays, live
-> narration and automated recaps — personalised by mode (casual fan / analyst), language, favourite
-> club, favourite player and a chosen metric. A deterministic rule engine decides; Azure OpenAI (or
-> GitHub Models) only phrases; a Verifier agent rejects any number, label or player the engine did not
-> produce.
+> **Important: all data in this project is synthetic.**
+> No real match data was provided by the hackathon, so `generate_data.py` simulates two fictional clubs and their match events. Every result shown here only demonstrates that the analysis pipeline works end to end. **Nothing in this repository describes real football patterns.**
 
-## The five-stage pipeline (from the brief)
+Built for the Microsoft × Premier League hackathon.
+
+## What it does
+
+Chemistry XI turns a stream of match events into verified key moments and explains *why* each one matters (control vs chaos, pressure, rhythm, and whether a goal came from a player link the engine had already flagged). Output is delivered as timed, machine-readable broadcast overlays, live narration and automated recaps, personalised by mode (casual fan / analyst), language, favourite club, favourite player and a chosen metric.
+
+The core idea is **player chemistry**: if player A's passes to player B succeed more often than A's passes to other teammates, the pair is treated as a high-chemistry link, and a **"Super Link"** effect is triggered when that link is involved in play.
+
+A deterministic rule engine makes every decision. An LLM (GitHub Models) only phrases the result, and a Verifier agent rejects any number, label or player name the engine did not produce.
+
+## Pipeline
+
 | Stage | What happens | Code |
 |---|---|---|
-| (a) Ingest | Time-ordered synthetic events (passes, shots, tackles, possession changes, pressure) with metadata; the app replays them event by event. At any moment only `events[:k]` exist. | `generate_data.py`, `pipeline.py` |
-| (b) Interpret | Team/player stats, pass quality (distance, accuracy, difficulty), ball and shot speed, threshold indicators, xG | `insight.py` |
-| (c) Explain | Game state from the last 5 match minutes: `CONTROL`, `HIGH_PRESS`, `CHAOS`, `BALANCED` + rhythm; key moments with a "why it matters"; player-link engine (Beta-smoothed, with uncertainty) | `insight.py`, `chem_engine.py` |
-| (d) Render | Lower-third overlay cards and a downloadable, timed JSON overlay feed | `overlays.py`, `app.py` |
-| (e) Personalise | Casual fan vs analyst, favourite club/player, **player focus mode**, metric focus, 4 languages, 4 narration voices | `personalize.py`, `i18n.py`, `agents.py` |
+| Ingest | Time-ordered synthetic events (passes, shots, tackles, possession changes, pressure). At any moment only `events[:k]` exist. | `generate_data.py`, `pipeline.py` |
+| Interpret | Team and player stats, pass quality, ball and shot speed, threshold indicators, xG | `insight.py` |
+| Explain | Game state from the last 5 match minutes (`CONTROL`, `HIGH_PRESS`, `CHAOS`, `BALANCED`), key moments, player-link engine | `insight.py`, `chem_engine.py` |
+| Render | Lower-third overlay cards and a downloadable timed JSON feed | `overlays.py`, `app.py` |
+| Personalise | Fan/analyst mode, favourite club/player, metric focus, 4 languages | `personalize.py`, `i18n.py`, `agents.py` |
 
-## Agents
 ```mermaid
 flowchart LR
   D[Synthetic events] --> E[Rule engine + insight<br/>deterministic] -->|moments, numbers, reasons| A[Analyst agent]
-  A --> N[Narrator agent<br/>Azure OpenAI / GitHub Models]
+  A --> N[Narrator agent<br/>GitHub Models]
   N --> V{Verifier agent<br/>numbers · labels · players}
   V -- rejected + feedback --> N
   V -- verified --> O[Overlay + feed + recap]
   N -. no key / 3 bad drafts .-> T[Verified multilingual template] --> O
 ```
-- **Analyst** calls deterministic tools; **Narrator** writes in a voice and language; **Verifier** blocks
-  anything not in the facts (works for CJK text too); the **Orchestrator** retries with feedback, then
-  falls back to a verified template. The **Recap agent** runs the same loop over the whole match.
-- With no LLM key the app is fully functional in template mode (4 languages).
 
-## Brief checklist
-- Player identification with shirt number/position, threshold indicators (long pass, ball speed, shot speed) ✅
-- Pass distance, accuracy, difficulty rating; ball speed and shot speed ✅
-- Narratives, milestones, player-performance context, recaps ✅
-- Explainability: control vs chaos, pressure, rhythm, link-assisted goals ✅
-- Data innovation: two fictional clubs, six event types, coordinates, xG, match metadata (`match_meta.json`) ✅
-- Multi-language: English, 中文, 日本語, Español ✅ (+ any language via the LLM, under the same verifier)
-- Machine-readable overlays ✅ · Player focus, favourite club/player, metric focus ✅
-- **Auto-eventing from video: not implemented** (out of scope; the pipeline starts from events).
-- **Player running speed / distance: not modelled**; indicators use ball and shot speed.
+With no LLM key the app still works in template mode (4 languages).
+
+## Rule definitions (Chemistry / Super Link)
+
+All thresholds live in `chem_config.py`.
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| Baseline | `<FILL IN>` | What A→B is compared against (A's success rate to all other teammates) |
+| Chemistry threshold | `<FILL IN: e.g. +0.10 absolute>` | How far above the baseline A→B must be to count as high chemistry |
+| Minimum passes | `<FILL IN>` | Minimum A→B passes before a link can be flagged |
+| Time window | `<FILL IN>` | Period over which passes are counted |
+| Smoothing | Beta distribution, prior `<FILL IN>` | Pulls small samples toward the baseline and gives an uncertainty band |
+| Super Link trigger | `<FILL IN>` | Exact condition that activates the effect |
+
+These values are illustrative, chosen to make the simulated data produce visible results. They are not calibrated on real matches.
+
+## Run
+
+```bash
+pip install -r requirements-dev.txt
+python generate_data.py        # optional; the app creates data when missing
+python -m pytest -q            # 33 tests
+streamlit run app.py
+```
+
+Optional LLM: set `GITHUB_MODELS_TOKEN` (and optionally `GITHUB_MODELS_MODEL`). See `.env.example`. Never commit your real `.env`.
 
 ## Overlay schema (`chemistry-xi.overlay/1`)
+
 ```json
 {"schema": "chemistry-xi.overlay/1", "overlays": [{
   "schema": "chemistry-xi.overlay/1", "id": "m166-goal", "type": "goal", "style": "celebration",
@@ -54,38 +72,26 @@ flowchart LR
   "chips": [{"label": "Score", "value": "2-1"}, {"label": "xG", "value": 0.29}]
 }]}
 ```
-`start_s` is match time in seconds; `duration_s` is how long the graphic should stay up.
 
-## Run
-```bash
-pip install -r requirements-dev.txt
-python generate_data.py        # optional; the app creates data when missing
-python -m pytest -q            # 33 tests
-streamlit run app.py
-```
-LLM (optional, either one): `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
-**or** `GITHUB_MODELS_TOKEN` (+ optional `GITHUB_MODELS_MODEL`). See `.env.example`.
+`start_s` is match time in seconds; `duration_s` is how long the graphic stays up.
 
-## Deploy to Azure Container Apps
-```bash
-az login
-az containerapp up --name chemistry-xi --resource-group <rg> --location <region> \
-  --source . --ingress external --target-port 8501
-az containerapp secret set -n chemistry-xi -g <rg> --secrets aoai-key=<KEY>
-az containerapp update -n chemistry-xi -g <rg> --min-replicas 1 --set-env-vars \
-  AZURE_OPENAI_ENDPOINT=<endpoint> AZURE_OPENAI_DEPLOYMENT=<deployment> AZURE_OPENAI_API_KEY=secretref:aoai-key
-```
+## Technologies
 
-## Technologies actually used
-<!-- Edit to match reality. Keep only what you really used. -->
-- Python, Streamlit, Altair/pandas, pytest, GitHub Actions, Docker
-- LLM provider: **Azure OpenAI** *or* **GitHub Models** (whichever you configure) — delete the other line
-- Hosting: **Azure Container Apps** (only if you deployed there)
+Python, Streamlit, pandas, Altair, pytest. LLM provider: GitHub Models.
 
-## Limitations (honest)
-- Synthetic data; thresholds are illustrative (`chem_config.py`). Possession is a pass-share proxy.
-- A high pass-success rate does not prove chemistry; Buffs are analytical states.
-- The verifier checks digits, labels and player names, not purely verbal claims or causal wording.
-- Non-English templates were written by the author and should be reviewed by native speakers before
-  any production use.
+## Known limitations
+
+- **Synthetic data.** Conclusions only show that the pipeline runs; they say nothing about real football.
+- Thresholds are illustrative (`chem_config.py`). Possession is a pass-share proxy.
+- A high pass-success rate does not prove chemistry. A Super Link is an analytical state, not a causal claim.
+- No false-positive testing yet: the engine has not been checked against randomly generated data with no true links.
+- The Verifier checks digits, labels and player names, not purely verbal claims or causal wording.
 - The Beta credible band is a normal approximation.
+- Non-English templates were written by the author and have not been reviewed by native speakers.
+- Not implemented: auto-eventing from video, player running speed and distance.
+
+## Roadmap
+
+1. **Validate on real data.** Run the same pipeline on StatsBomb open event data and check whether flagged links hold up.
+2. **False-positive test.** Generate data with no true links and measure how often the engine still flags a pair.
+3. Tune thresholds and minimum passes based on 1 and 2.
